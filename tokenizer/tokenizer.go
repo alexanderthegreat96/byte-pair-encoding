@@ -4,16 +4,19 @@ import (
 	"strings"
 )
 
-// Byte-Pair Encoding Implementation in the Go Programming Language
-// Based on Meta.ai and OpenAI's algorithm
+// Byte-Pair Encoding Algorithm in the Go Programming Language
+// Based on the original 1994 data compression algorithm by Philip Gage.
+//
+// The algorithm implementation is split into three phases:
+//
+//	A. Vocabulary Initialization
+//	B. Vocabulary Training (finding the best pairs)
+//	C. Vocabulary Usage
+//
+// This implementation uses a slice of bytes ([]byte) rather than a slice of runes ([]rune).
+// Bytes are chosen because they are closer to the metal and avoid rune abstractions
+// hiding explicit byte-level behavior.
 
-// Algorithm implementation is split in 2 phases:
-// A -> Vocabulary Initialization
-// B -> Vocabulary Training -> finding the best pairs
-
-// I could use 2 types of data -> a slice of rune or a slice of bytes
-// I chose to go with bytes, as bytes are a lot more accurate and closer
-// to the metal and I don't want runes to hide explicit behavior
 type Vocabulary struct {
 	data      map[int][]byte
 	merges    map[[2]int]int
@@ -119,6 +122,9 @@ func (v *Vocabulary) Decode(tokens []int) string {
 	return string(fullBytes)
 }
 
+// debugging function which outputs a "tokenized" format
+// ex: This is just some sample stuff
+// output: Th_is_ _is_ _j_us_t_ s_o_me_ s_am_p_le_ s_tu_ff_
 func (v *Vocabulary) FormatTokens(inputTokens []int) string {
 	if len(inputTokens) < 1 {
 		return ""
