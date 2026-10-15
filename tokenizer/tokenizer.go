@@ -1,4 +1,8 @@
-package main
+package tokenizer
+
+import (
+	"strings"
+)
 
 // Byte-Pair Encoding Implementation in the Go Programming Language
 // Based on Meta.ai and OpenAI's algorithm
@@ -36,12 +40,38 @@ func NewVocabulary(capacity int) *Vocabulary {
 	}
 }
 
+func (v *Vocabulary) AddSpecialTokenFromBytes(token []byte) {
+	if len(token) < 1 {
+		return
+	}
+
+	nextId := len(v.data)
+	v.data[nextId] = token
+}
+
+func (v *Vocabulary) AddSpecialTokenFromString(token string) {
+	if len(token) < 1 {
+		return
+	}
+
+	nextId := len(v.data)
+	v.data[nextId] = []byte(token)
+}
+
 func (v *Vocabulary) GetTokenAtId(tokenId int) []byte {
 	if tokenId > len(v.data) {
 		return nil
 	}
 
 	return v.data[tokenId]
+}
+
+func (v *Vocabulary) GetData() map[int][]byte {
+	return v.data
+}
+
+func (v *Vocabulary) GetMerges() map[[2]int]int {
+	return v.merges
 }
 
 // translate a string input to a slice of ints
@@ -72,119 +102,6 @@ func (v *Vocabulary) Encode(input string) []int {
 	return integerSlice
 }
 
-func (v *Vocabulary) TrainFromBytes(inputStream []byte, maxVocabularySize int) {
-	integerSlice := make([]int, 0, len(inputStream))
-
-	for _, b := range inputStream {
-		integerSlice = append(integerSlice, int(b))
-	}
-
-	for len(v.data) < maxVocabularySize {
-		if len(integerSlice) < 12 {
-			break
-		}
-
-		freqCounter := make(map[[2]int]int)
-
-		var pair [2]int
-		for i := 0; i < len(integerSlice)-1; i++ {
-			pair[0] = integerSlice[i]
-			pair[1] = integerSlice[i+1]
-			freqCounter[pair]++
-		}
-
-		if len(freqCounter) == 0 {
-			break
-		}
-
-		var bestPair [2]int
-		var maxCount int = -1
-		for p, count := range freqCounter {
-			if count > maxCount {
-				maxCount = count
-				bestPair = p
-			}
-		}
-
-		newTokenId := len(v.data)
-
-		leftBytes := v.data[bestPair[0]]
-		rightBytes := v.data[bestPair[1]]
-
-		combinedBytes := append([]byte{}, leftBytes...)
-		combinedBytes = append(combinedBytes, rightBytes...)
-
-		v.data[newTokenId] = combinedBytes
-		v.merges[bestPair] = newTokenId
-		v.mergeList = append(v.mergeList, mergeRule{
-			Left:  bestPair[0],
-			Right: bestPair[1],
-			NewId: newTokenId,
-		})
-
-		integerSlice = mergePairs(integerSlice, bestPair, newTokenId)
-	}
-}
-
-func (v *Vocabulary) Train(inputData string, maxVocabularySize int) {
-	if len(inputData) < 1 {
-		return
-	}
-
-	stringToBytes := []byte(inputData)
-	integerSlice := make([]int, 0, len(stringToBytes))
-
-	for _, b := range stringToBytes {
-		integerSlice = append(integerSlice, int(b))
-	}
-
-	for len(v.data) < maxVocabularySize {
-		if len(integerSlice) < 12 {
-			break
-		}
-
-		freqCounter := make(map[[2]int]int)
-
-		var pair [2]int
-		for i := 0; i < len(integerSlice)-1; i++ {
-			pair[0] = integerSlice[i]
-			pair[1] = integerSlice[i+1]
-			freqCounter[pair]++
-		}
-
-		if len(freqCounter) == 0 {
-			break
-		}
-
-		var bestPair [2]int
-		var maxCount int = -1
-		for p, count := range freqCounter {
-			if count > maxCount {
-				maxCount = count
-				bestPair = p
-			}
-		}
-
-		newTokenId := len(v.data)
-
-		leftBytes := v.data[bestPair[0]]
-		rightBytes := v.data[bestPair[1]]
-
-		combinedBytes := append([]byte{}, leftBytes...)
-		combinedBytes = append(combinedBytes, rightBytes...)
-
-		v.data[newTokenId] = combinedBytes
-		v.merges[bestPair] = newTokenId
-		v.mergeList = append(v.mergeList, mergeRule{
-			Left:  bestPair[0],
-			Right: bestPair[1],
-			NewId: newTokenId,
-		})
-
-		integerSlice = mergePairs(integerSlice, bestPair, newTokenId)
-	}
-}
-
 // can be used to verify if the encoding process produces
 // good results
 func (v *Vocabulary) Decode(tokens []int) string {
@@ -202,6 +119,45 @@ func (v *Vocabulary) Decode(tokens []int) string {
 	return string(fullBytes)
 }
 
+func (v *Vocabulary) FormatTokens(inputTokens []int) string {
+	if len(inputTokens) < 1 {
+		return ""
+	}
+
+	stringBuff := make([]string, 0, len(inputTokens))
+
+	for _, tokenId := range inputTokens {
+		tokenBytes := v.GetTokenAtId(tokenId)
+		if tokenBytes != nil {
+			stringBuff = append(stringBuff, string(tokenBytes))
+		} else {
+			stringBuff = append(stringBuff, "[UNK]")
+		}
+
+	}
+
+	return strings.Join(stringBuff, "_")
+}
+
+// this should be utilized inside a real scenario
+// where we read a lot of data from a file
+// therefore, a string conversion from the byte buffer
+// will cause performance issues
+// and we don't want that
+func (v *Vocabulary) TrainFromBytes(inputStream []byte, maxVocabularySize int) {
+	v.trainHelper(inputStream, maxVocabularySize)
+}
+
+// this is useful for testing and small set scenarios
+func (v *Vocabulary) TrainFromString(inputData string, maxVocabularySize int) {
+	if len(inputData) < 1 {
+		return
+	}
+
+	stringToBytes := []byte(inputData)
+	v.trainHelper(stringToBytes, maxVocabularySize)
+}
+
 func mergePairs(inputSlice []int, targetPair [2]int, replacementId int) []int {
 	newSlice := make([]int, 0, len(inputSlice))
 
@@ -215,4 +171,64 @@ func mergePairs(inputSlice []int, targetPair [2]int, replacementId int) []int {
 		}
 	}
 	return newSlice
+}
+
+// this is what does the magic of training
+// nothing crazy though, but it definately does it's job
+func (v *Vocabulary) trainHelper(inputBytes []byte, maxVocabularySize int) {
+	if len(inputBytes) < 1 {
+		return
+	}
+
+	integerSlice := make([]int, 0, len(inputBytes))
+
+	for _, b := range inputBytes {
+		integerSlice = append(integerSlice, int(b))
+	}
+
+	for len(v.data) < maxVocabularySize {
+		if len(integerSlice) < 12 {
+			break
+		}
+
+		freqCounter := make(map[[2]int]int)
+
+		var pair [2]int
+		for i := 0; i < len(integerSlice)-1; i++ {
+			pair[0] = integerSlice[i]
+			pair[1] = integerSlice[i+1]
+			freqCounter[pair]++
+		}
+
+		if len(freqCounter) == 0 {
+			break
+		}
+
+		var bestPair [2]int
+		var maxCount int = -1
+		for p, count := range freqCounter {
+			if count > maxCount {
+				maxCount = count
+				bestPair = p
+			}
+		}
+
+		newTokenId := len(v.data)
+
+		leftBytes := v.data[bestPair[0]]
+		rightBytes := v.data[bestPair[1]]
+
+		combinedBytes := append([]byte{}, leftBytes...)
+		combinedBytes = append(combinedBytes, rightBytes...)
+
+		v.data[newTokenId] = combinedBytes
+		v.merges[bestPair] = newTokenId
+		v.mergeList = append(v.mergeList, mergeRule{
+			Left:  bestPair[0],
+			Right: bestPair[1],
+			NewId: newTokenId,
+		})
+
+		integerSlice = mergePairs(integerSlice, bestPair, newTokenId)
+	}
 }

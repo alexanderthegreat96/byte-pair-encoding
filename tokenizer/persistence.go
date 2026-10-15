@@ -1,4 +1,4 @@
-package main
+package tokenizer
 
 import (
 	"encoding/json"
@@ -10,13 +10,22 @@ type persistenceDTO struct {
 	MergeList []mergeRule    `json:"merge_list"`
 }
 
+func LoadTrainingData(filename string) ([]byte, error) {
+	file, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
+}
+
 func SaveTokenizer(v *Vocabulary, filename string) error {
 	dto := persistenceDTO{
 		Data:      v.data,
 		MergeList: v.mergeList,
 	}
 
-	fileData, err := json.MarshalIndent(dto, "", "  ")
+	fileData, err := json.Marshal(dto)
 	if err != nil {
 		return err
 	}
@@ -47,13 +56,4 @@ func LoadTokenizer(filename string) (*Vocabulary, error) {
 	}
 
 	return v, nil
-}
-
-func LoadTrainingData(filename string) ([]byte, error) {
-	file, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	return file, nil
 }

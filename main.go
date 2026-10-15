@@ -1,20 +1,36 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/alexanderthegreat96/byte-pair-encoding/tokenizer"
+)
 
 const (
-	VOCABULARY_CAPACITY       int    = 256
-	SHOULD_TRAIN_MODEL        bool   = false
-	TOKENIZER_DATA_STORE_FILE string = "tokenizer_model_data.json"
-	TRAINING_DATA_FILE        string = "train.txt"
+	SHOULD_TRAIN_MODEL                bool   = false // flip this to train first
+	VOCABULARY_CAPACITY               int    = 256   // default to 256 bytes
+	TOKENIZER_DATA_STORE_FILE         string = "tokenizer_model_data.json"
+	TRAINING_DATA_FILE                string = "train.txt"
+	TRAINING_DATA_MAX_VOCABULARY_SIZE int    = 2000 // you should change this in case you have a larger file than what I have
 )
 
 func main() {
 	// training phase
 	if SHOULD_TRAIN_MODEL {
-		vocabulary := NewVocabulary(VOCABULARY_CAPACITY)
+		vocabulary := tokenizer.NewVocabulary(VOCABULARY_CAPACITY)
 
-		trainData, err := LoadTrainingData(TRAINING_DATA_FILE)
+		// unix tokens for example
+		specialTokens := []string{
+			"[PAD]",
+			"[UNK]",
+			"<|endoftext|>",
+		}
+
+		for _, token := range specialTokens {
+			vocabulary.AddSpecialTokenFromString(token)
+		}
+
+		trainData, err := tokenizer.LoadTrainingData(TRAINING_DATA_FILE)
 		if err != nil {
 			panic(err)
 		}
@@ -26,9 +42,9 @@ func main() {
 		// probably the sweet spot for this would be between 1 and 3k
 		// so I chose 2k
 		// if we go above this, it will not produce meaningful results
-		vocabulary.TrainFromBytes(trainData, 2000)
+		vocabulary.TrainFromBytes(trainData, TRAINING_DATA_MAX_VOCABULARY_SIZE)
 
-		err = SaveTokenizer(vocabulary, TOKENIZER_DATA_STORE_FILE)
+		err = tokenizer.SaveTokenizer(vocabulary, TOKENIZER_DATA_STORE_FILE)
 		if err != nil {
 			panic(err)
 		}
@@ -36,10 +52,10 @@ func main() {
 	}
 
 	// this will return an instance of vocabulary that we can do stuff on
-	var loadVocab *Vocabulary
+	var loadVocab *tokenizer.Vocabulary
 	var err error
 
-	loadVocab, err = LoadTokenizer(TOKENIZER_DATA_STORE_FILE)
+	loadVocab, err = tokenizer.LoadTokenizer(TOKENIZER_DATA_STORE_FILE)
 	if err != nil {
 		panic(err)
 	}
@@ -49,10 +65,12 @@ func main() {
 
 	encoded := loadVocab.Encode(inputData)
 	decoded := loadVocab.Decode(encoded)
+	tokenized := loadVocab.FormatTokens(encoded)
 
-	fmt.Printf("Used Data: [%s]\n", inputData)
-	fmt.Printf("Encoded Tokens: %v\n", encoded)
-	fmt.Printf("Decoded Tokens: %v\n", decoded)
+	fmt.Printf("Input Data:\n%s\n", inputData)
+	fmt.Printf("Encoded Tokens:\n%v\n", encoded)
+	fmt.Printf("Decoded Tokens:\n%v\n", decoded)
+	fmt.Printf("Tokenized Data:\n%v\n", tokenized)
 
 	for _, id := range encoded {
 		fmt.Printf("Token ID: %d -> %q\n", id, loadVocab.GetTokenAtId(id))
